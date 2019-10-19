@@ -1,0 +1,17 @@
+[package]
+name = "A-Reliable-Transport-Protocol-In-Rust"
+version = "0.1.0"
+authors = ["Ashay Shah <ashah252@uic.edu>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "rtp-send"
+path = "src/send.rs"
+
+[[bin]]
+name = "rtp-recv"
+path = "src/recv.rs"
+
+[dependencies]
