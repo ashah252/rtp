@@ -1,41 +1,30 @@
-
-use std::env;
-use std::io;
-use std::io::prelude::*;
-use std::fs::File;
+use std::net::SocketAddr;
+use std::net::IpAddr;
 
 mod rtp;
-
-fn usage(){
-    println!("Usage: $PATH/rtp-send <ip> <port> <filepath>");
-    std::process::exit(0);
-}
+use rtp::tcp_session::TcpSession;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    match args.len() {
-        4 => {},
-        _ => usage()
-    }
 
-    let ip = args[1].clone();
-    let port: u16 = args[2].parse::<u16>().unwrap();
-    let filepath = args[3].clone();
+    let meta_data = clap::App::new("RTP-Send")
+                    .args_from_usage(
+                        "<IP> 'The Ip Address of End Host'
+                        <PORT> 'The Port of End Host'"
+                    );
+    
+    let arg_matches: clap::ArgMatches = meta_data.get_matches();
+    let ip: IpAddr = arg_matches
+                    .value_of("IP")
+                    .expect("Value of IP Not Found After Parsing")
+                    .parse()
+                    .expect("Couldn't Parse IP String as IpAddr");
+    let port: u16 = arg_matches
+                    .value_of("PORT")
+                    .expect("Value of PORT Not Found After Parsing")
+                    .parse()
+                    .expect("Couldn't Parse PORT String as u16");
     
 
-    println!("sending {} to {}:{}", filepath, ip, port);
-    let mut tcp_sender: rtp::TcpSession;
-
-    let fd: File;
-    match File::open(&filepath) {
-        Ok(x) => {
-            fd = x;
-        },
-        Err(_) => {
-            println!("Error Opening file {}", filepath);
-            std::process::exit(0);
-        }
-    }
-    
+    let mut sender: TcpSession = TcpSession::socket();
+    sender.connect(SocketAddr::new(ip, port));
 }
-
