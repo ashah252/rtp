@@ -43,8 +43,8 @@ impl TcpPacketHeader {
     }
 }
 
-fn recv_from<P: FnOnce(usize, std::net::SocketAddr, &mut [u8]) -> Result<u32, ()>> (session: &TcpSession, predicate: P) -> Result<u32, ()> {
-    let buf = &mut [0u8;super::mtu_size_bytes];
+fn recv_from<P: FnOnce(usize, std::net::SocketAddr, &mut [u8]) ->Result<(u32, std::net::SocketAddr), ()>> (session: &TcpSession, predicate: P) -> Result<(u32, std::net::SocketAddr), ()> {
+    let buf = &mut [0u8; super::mtu_size_bytes];
     match session.sock.recv_from(buf) {
         Ok((num_recved, endpoint_addr)) => {
             predicate(num_recved, endpoint_addr, buf)
@@ -53,16 +53,33 @@ fn recv_from<P: FnOnce(usize, std::net::SocketAddr, &mut [u8]) -> Result<u32, ()
     }
 }
 
-fn recv_hdr_from(session: &TcpSession) -> Result<u32, ()> {
+fn recv_from_and_unpack<P: FnOnce(usize, std::net::SocketAddr, &TcpPacketHeader, Option<&[u8]>) -> Result<(u32, std::net::SocketAddr), ()>>(session: &TcpSession, predicate: P) -> Result<(u32, std::net::SocketAddr), ()> {
     recv_from(
         session,
 
-        |_, _, buf| {
+        |num_recved, addr, buf| {
+            let (packet_hdr, payload) = parse_packet(buf);
+            let hdr: &TcpPacketHeader = packet_hdr.expect("Invalid Header");
+            if hdr.matches(session) {
+                predicate(num_recved, addr, hdr, payload)
+
+            } else {
+                Err(())
+            }
+        }
+    )
+}
+
+fn recv_hdr_from(session: &TcpSession) -> Result<(u32, std::net::SocketAddr), ()> {
+    recv_from(
+        session,
+
+        |_, addr, buf| {
             let (packet_hdr, _) = parse_packet(buf);
             let hdr: &TcpPacketHeader = packet_hdr.expect("Invalid Header");
 
                 if hdr.matches(session) {
-                    Ok(hdr.ack) // next outgoing seq
+                    Ok((hdr.ack, addr)) // next outgoing seq
 
                 } else {
                     Err(())
@@ -72,18 +89,18 @@ fn recv_hdr_from(session: &TcpSession) -> Result<u32, ()> {
 }
 
 pub fn send_syn(session: &TcpSession) {
-    session.sock.send_to(create_packet(PacketType::Syn, 1, 0, 0, 0, None).as_slice(), session.other.expect("Couldn't Send Syn Packet, No SocketAddr Provided"));
+    session.sock.send_to(create_packet(PacketType::Syn, session.outgoing_seq, session.ack_seq, 0, 0, None).as_slice(), session.other.expect("Couldn't Send Syn Packet, No SocketAddr Provided"));
 }
 
-pub fn recv_syn(session: &TcpSession) -> Result<u32, ()> {
+pub fn recv_syn(session: &TcpSession) -> Result<(u32, std::net::SocketAddr), ()> {
     recv_hdr_from(session)
 }
 
 pub fn send_syn_ack(session: &TcpSession) {
-    session.sock.send_to(create_packet(PacketType::Syn, 1, 0, 0, 0, None).as_slice(), session.other.expect("Couldn't Send Syn Packet, No SocketAddr Provided"));
+    session.sock.send_to(create_packet(PacketType::SynAck, session.outgoing_seq, session.ack_seq, 0, 0, None).as_slice(), session.other.expect("Couldn't Send Syn Packet, No SocketAddr Provided"));
 }
 
-pub fn recv_syn_ack(session: &TcpSession) -> Result<u32, ()> {
+pub fn recv_syn_ack(session: &TcpSession) -> Result<(u32, std::net::SocketAddr), ()> {
     recv_hdr_from(session)
 }
 
